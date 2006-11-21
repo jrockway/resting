@@ -11,4 +11,5 @@ page 'index';
 
 __DATA__
 __index__
-Hello, world;
+Hello, world
+
