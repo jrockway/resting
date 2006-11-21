@@ -41,13 +41,11 @@ like L<Catalyst|Catalyst>.
 
 =cut
 
-# TODO
-#local $SIG{__DIE__} = sub {
-#    print {*STDERR} "fatal error: @_";
-#    exit(255);
-#};
-
 my $app_name = 'Resting';
+$SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
+$SIG{__DIE__}  = sub { my $m=shift; chomp $m; fatal($m); };
+
+
 sub application(;$){
     $app_name = shift if $_[0];
     return $app_name;
@@ -64,8 +62,14 @@ sub warning($){
 sub message($){
     print {*STDERR} "[$app_name:$$][message] @_\n";
 }
+# kills request
 sub error($){
-    print {*STDERR} "*** [$app_name:$$][error] @_\n";
+    print {*STDERR} "[$app_name:$$][error] @_\n";
+}
+# kills program
+sub fatal($){
+    print {*STDERR} "[$app_name:$$][fatal] *** @_\n";
+    exit(255);
 }
 sub info($){
     print {*STDERR} "[$app_name:$$][info] @_\n";
@@ -172,13 +176,14 @@ sub public(){
 
 sub show($){
     my $what = shift;
-    debug "Showing $what";
+    
 }
 
+my $template;
 sub template($){
-    my $template = shift;
-    debug "Template $template";
-    return "template: $template";
+    my $_template = shift;
+    $template = $_template if $_template;
+    return {template => $template};
 }
 
 sub form($){
@@ -297,17 +302,52 @@ sub test($){
     return "Hello, world!";
 }
 
+## setup
+
+my %templates;
+sub _load_templates(){
+    my $templates = do { local $/; <main::DATA> };
+    return unless $templates;
+    my @lines = split/\n/, $templates;
+    my $line_count = 1;
+    my $cur_template;
+
+    foreach my $line (@lines){
+	if($line =~ /^__(.+)__/){
+	    $cur_template = $1;
+	}
+	else {
+	    die "invalid template format at __DATA__:$line_count" if !$cur_template; 
+	    $templates{$cur_template} .= $line;
+	}
+	$line_count++;
+    }
+}
+
 ## main loop
 my $already_started = 0;
 sub start() {
     $already_started = 1;
+    _load_templates();
+    
+    # print actions
     my $actions = Text::SimpleTable->new([15, 'page'], [15, 'template'], 
-					 [50, 'action']); 
+					 [47, 'action']); 
     foreach my $page (keys %pages){
 	$actions->row($page, $pages{$page}->{template}, $pages{$page}->{action});
     }
-    debug "Loaded pages";
-    debug "\n". $actions->draw();
+
+    # print templates
+    my $templates = Text::SimpleTable->new([15, 'name'], [65, 'summary']);
+    foreach my $template (keys %templates){
+	my $t = $templates{$template};
+	$t =~ /(.{0,65})/;
+	$templates->row($template, $1);
+    }
+    
+    # print database tables
+    debug "Loaded pages\n". $actions->draw();
+    debug "Loaded templates\n". $templates->draw();
     debug "$app_name initialized!  Starting.";    
 }
 
@@ -316,7 +356,7 @@ END {
     # auto-start the app if start() isn't explicitly called
     start unless $already_started;
 }
-
+1;
 
 =head1 AUTHOR
 
