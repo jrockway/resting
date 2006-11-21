@@ -10,7 +10,7 @@ application 'Blog';
 database 'dbi:SQLite:blog.db';
 
 # setup our HTML
-doctype xhtml++;
+doctype ++xhtml;
 style h1 => {color => 'blue'};
 before everything 'This is a blog!';
 after everything 'I hope you liked it!';

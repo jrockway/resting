@@ -4,6 +4,7 @@ use warnings;
 use strict;
 use base 'Exporter';
 use Carp;
+use Getopt::Long;
 use CGI;
 use DBIx::Class;
 use Template;
@@ -197,10 +198,11 @@ sub form($){
 }
 
 ## generated HTML stuff
-my $doctype = "xml";
-sub doctype($){
-    $doctype = $_[0] if $_[0];
-    debug "doctype is $doctype now";
+my $html = 'xhtml';
+my $doctype = bless \$html => 'xhtml';
+sub doctype(;$){
+    $doctype = $_[0];
+    debug "Doctype is set to $doctype";
     return $doctype;
 }
 
@@ -467,8 +469,8 @@ under the same terms as Perl itself.
 package xhtml; # xhtml++ is xml 
 use overload 
   fallback => 1, 
-  '""' => sub { return "xhtml" },
-  '++' => sub { return "xml"   };
+  '""' => sub { ${$_[0]} },
+  '++' => sub { my $x = 'xml'; $_[0] = bless \$x };
 1;
 
 package Resting;
