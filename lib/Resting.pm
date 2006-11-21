@@ -2,10 +2,27 @@ package Resting;
 
 use warnings;
 use strict;
+use base 'Exporter';
+use CGI;
+use DBIx::Class;
+use Template;
+
+our @EXPORT_OK = qw{application database table group page debug
+		    style doctype html xhtml
+		    after before everything
+		    insert all
+		    text varchar integer datetime
+		    primary foreign key
+		    request stash method
+		    public group
+		    show form template
+		};
+  
+our @EXPORT    = @EXPORT_OK;
 
 =head1 NAME
 
-Resting - The great new Resting!
+Resting - micro web framework
 
 =head1 VERSION
 
@@ -17,35 +34,202 @@ our $VERSION = '0.01';
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
+C<Resting> lets you write a 1-file MVC web app.  It's good for
+protoyping small apps before implementing them with a real framework,
+like L<Catalyst|Catalyst>.
 
-Perhaps a little code snippet.
+     [[[ TODO: copy-n-paste blog.pl here ]]]
 
-    use Resting;
-
-    my $foo = Resting->new();
-    ...
-
-=head1 EXPORT
-
-A list of functions that can be exported.  You can delete this section
-if you don't export anything, such as for a purely object-oriented module.
-
-=head1 FUNCTIONS
-
-=head2 function1
+=head1 METHODS
 
 =cut
 
-sub function1 {
+my $app_name = 'Resting';
+sub application(;$){
+    $app_name = shift if $_[0];
+    return $app_name;
 }
 
-=head2 function2
-
-=cut
-
-sub function2 {
+sub debug($) {
+    print {*STDERR} "$app_name: @_\n";
 }
+
+## page functions ##
+my %pages;
+sub page($@) {
+    my $name   = shift;
+    my @params = @_;
+    
+    debug "Registering page $name";
+}
+
+## database functions ##
+
+my $database;
+sub database(;$) {
+    my $connect_info = shift;
+    debug "Setting current database to $connect_info"; 
+}
+
+my %tables;
+sub table($@){
+    my $name = shift;
+    my %cols = @_;
+
+    debug "Declaring table $name: @_";
+}
+
+# column attributes
+
+sub key(;$$){
+    my $fk_table = shift;
+    my $fk_col   = shift;
+
+    if($fk_table && $fk_col){
+	debug "Adding foreign key relation to $fk_table.$fk_col";
+    }
+
+    else {
+	debug "Adding primary key";
+    }
+
+}
+
+sub primary($){
+    my $key = shift;
+    debug "Primary key";
+}
+
+sub foreign($){
+    my $key = shift;
+    debug "Foreign key";
+}
+
+# database types
+sub varchar(;$){
+    return 1;
+}
+
+sub datetime(){
+    return 1;
+}
+
+sub text(){
+    return 1;
+}
+
+sub integer(;$){
+    # optional $ is for "integer primary key" syntax
+}
+
+# database operations
+
+sub all($){
+    my $table = shift;
+    debug "Returning everything in $table";
+}
+
+sub insert($$){
+    my $what  = shift;
+    my $where = shift;
+    debug "Inserting $what into $where";
+}
+
+## acl stuff ##
+
+my %groups;
+sub group($){
+    my $name = shift;
+    debug "Registering group $name";
+}
+
+sub public(){
+    debug "Public access";
+}
+
+## template stuff
+
+sub show($){
+    my $what = shift;
+    debug "Showing $what";
+}
+
+sub template($){
+    my $template = shift;
+    debug "Template $template";
+    return "template: $template";
+}
+
+sub form($){
+    my $table = shift;
+    debug "Generate form for $table";
+    return "form: $table";
+}
+
+## generated HTML stuff
+my $doctype = "xml";
+sub doctype($){
+    $doctype = $_[0] if $_[0];
+    debug "doctype is $doctype now";
+    return $doctype;
+}
+
+my %style;
+sub style($$){
+    # need to merge hashes here
+    debug "adding style info";
+}
+
+sub html(){
+    return "html";
+}
+
+sub xhtml() : lvalue {
+    my $type = "xhtml";
+    my $ref = \$type;
+    bless $ref => 'xhtml'; # heh
+    return $ref;
+};
+
+sub everything($){
+    return $_[0];
+}
+
+sub before($){
+    my $template = shift;
+    debug "Will print '$template' before content";
+    return $template;
+}
+
+sub after($){
+    my $template = shift;
+    debug "Will print '$template' after content";
+    return $template;
+}
+
+
+## request stuff
+
+sub stash($@){
+    my $name = shift;
+    my @data = @_;
+    debug "Stashing $name";
+}
+
+sub request() {
+    return "Resting";
+}
+
+sub method() {
+    return "GET";
+}
+
+## main loop
+
+END {
+    debug "$app_name initialized!  Starting.";
+}
+
 
 =head1 AUTHOR
 
@@ -99,3 +283,10 @@ under the same terms as Perl itself.
 =cut
 
 1; # End of Resting
+
+package xhtml; # xhtml++ is xml 
+use overload 
+  fallback => 1, 
+  '""' => sub { return "xhtml" },
+  '++' => sub { return "xml"   };
+1;
