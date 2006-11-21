@@ -3,6 +3,7 @@ package Resting;
 use warnings;
 use strict;
 use base 'Exporter';
+use Getopt::Long;
 use Carp;
 use Getopt::Long;
 use CGI;
