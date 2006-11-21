@@ -31,7 +31,7 @@ group 'admins';
 # add some pages
 page index =>
   template => 'index',
-  action   => &index,
+  action   => \&index,
   access   => public;
 
 page 'history';
@@ -40,7 +40,7 @@ page 'history';
 # default template is 'history'
 
 page post  =>
-  action   => &post,
+  action   => \&post,
   access   => ['posters', 'admins'];
 
 # that's it
