@@ -34,10 +34,10 @@ page index =>
   action   => \&index,
   access   => public;
 
-page 'history';
-# default action is &history
+page 'articles';
+# default action is &articles
 # default access is public
-# default template is 'history'
+# default template is 'articles'
 
 page post  =>
   action   => \&post,
@@ -46,24 +46,38 @@ page post  =>
 # that's it
 
 sub index {
-    my @posts = all 'posts';
-    stash posts => @posts;
+    stash posts => (all 'posts')[0..5];
 }
 
 sub post {
-    if (request()->method eq 'GET') {
+    if (method eq 'GET') {
 	show template 'postform';
     } else {
-	insert request() => 'posts';
+	insert formdata => 'posts';
 	show template 'postok';    
     }
 }
+
+sub articles {
+    stash posts => all 'posts';
+}
+
 __DATA__
 __index__
 <h1>Welcome to the blog!</h1>
 <ul>
-[% WHILE post = posts %]
-<li>[% post.author %] wrote "[% post.title %]".</li>
+[% FOREACH post = posts %]
+<li>
+  <div class="post">
+   <div class="header">
+    <p><b>[% post.title %]</b></p>
+    <p>Written by [% post.author %] on [% post.date %]</p>
+   </div>
+   <div class="body">
+     [% post.body %]
+   </div>
+  </div>
+</li>
 [% END %]
 </ul>
 __post__
@@ -71,4 +85,10 @@ Fill out this form to post:
 [% form %]
 __postok__
 Thanks for posting an entry!
-  
+__articles__
+<p>Here are all the posts that have ever been posted.</p>
+<ul>
+[% FOREACH post = posts %]
+<li>[% post.author %] wrote "[% post.title %]".</li>
+[% END %]
+</ul>

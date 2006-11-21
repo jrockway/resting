@@ -65,11 +65,13 @@ sub message($){
 # kills request
 sub error($){
     print {*STDERR} "[$app_name:$$][error] @_\n";
+    local $SIG{__DIE__};
+    die @_; # eval can trap this
 }
 # kills program
 sub fatal($){
     print {*STDERR} "[$app_name:$$][fatal] *** @_\n";
-    exit(255);
+    die(@_);
 }
 sub info($){
     print {*STDERR} "[$app_name:$$][info] @_\n";
@@ -83,7 +85,7 @@ sub page($@) {
     
     debug "Registering page $name";
     $pages{$name} = {
-		     action   => ($params{action}   || $::{(caller)[0]}),
+		     action   => ($params{action}   || \&{(caller)[0]."::$name"}),
 		     template => ($params{template} || $name)
 		    };
 }
@@ -93,7 +95,8 @@ sub page($@) {
 my $database;
 sub database(;$) {
     my $connect_info = shift;
-    debug "Setting current database to $connect_info"; 
+    $database = $connect_info if $connect_info;
+    return $database;
 }
 
 my %tables;
@@ -111,40 +114,40 @@ sub key(;$$){
     my $fk_col   = shift;
 
     if($fk_table && $fk_col){
-	debug "Adding foreign key relation to $fk_table.$fk_col";
+	return {foreign => 1, table => $fk_table, column => $fk_col};
     }
-
+    
     else {
-	debug "Adding primary key";
+	return {primary => 1};
     }
-
 }
 
 sub primary($){
     my $key = shift;
-    debug "Primary key";
+    return $key;
 }
 
 sub foreign($){
     my $key = shift;
-    debug "Foreign key";
+    return $key;
 }
 
 # database types
-sub varchar(;$){
-    return 1;
+sub varchar($){
+    return {type => 'varchar', length => $_[0]};
 }
 
 sub datetime(){
-    return 1;
+    return {type => 'datetime'};
 }
 
 sub text(){
-    return 1;
+    return {type => 'text'};
 }
 
 sub integer(;$){
     # optional $ is for "integer primary key" syntax
+    return {type => 'integer', @%{$_[0]}};
 }
 
 # database operations
@@ -173,10 +176,11 @@ sub public(){
 }
 
 ## template stuff
-
+my $output;
 sub show($){
     my $what = shift;
-    
+    $output = "showing $what";
+    last actionexec;
 }
 
 my $template;
@@ -236,17 +240,27 @@ sub after($){
 
 ## request stuff
 
-sub stash($@){
+my %stash;
+sub stash(;$$){
     my $name = shift;
-    my @data = @_;
-    debug "Stashing $name";
+    if($name){
+	my $data = shift;
+	$stash{$name} = $data;
+    }
+    return \%stash;
+}
+
+my %flash;
+sub flash(;$$){
+    my $name = shift;
+    if($name){
+	my $data = shift;
+	$flash{$name} = $data;
+    }
+    return \%flash;
 }
 
 my $request;
-sub request() {
-    return "Resting"; # used like 
-}
-
 sub method() {
     return $request->{method};
 }
@@ -259,54 +273,92 @@ sub args() {
     return @{$request->{args}||[]};
 }
 
-##
-sub _error($$){
-    my $code = shift;
-    my $msg  = shift;
-    return "Error $code: $msg\n";
-}
-
-sub _find_action($){
-    my $path = shift;
-    my ($action, @args);
-    do {
-	$action = $pages{$path};
-	last if $action;
-	$path =~ m{(.+)/([^/]+)};
-	$path = $1;
-	unshift @args, $2;
-    } while($path);
-    # todo: index, default
-    return ($action, @args);
-}
 
 ## dispatcher
-
-## real functions
 
 sub _dispatch($) {
     my $uri  = shift;
     $request->{path} = $uri;
     my $path = $uri->path;    
 
-    my ($action, @args) = _find_action $path;
-    return _error 404, "No action matching `$path'" if $@;
-    
+    my ($action, @args) = _find_action($path);
+    return sub { $action->(@args) };
 }
 
+sub _find_action($){
+    my $path = shift;
+    my ($action, @args);
+    my $orig_path = $path;
+    
+    $path =~ s{^/}{};
+
+    $action = $pages{"$path/index"};
+    while(!$action && $path){
+	$action = $pages{$path};
+	last if $action;
+
+	$action = $pages{"$path/default"};
+	last if $action;
+	
+	$path =~ m{(.+)/([^/]+)}; #};
+	$path = $1;
+	unshift @args, $2;
+    };
+    
+    die "No action found for $orig_path" unless $action;
+    
+    # todo: index, default
+    return ($action, @args);
+}
+
+
+## misc exportable functions
+
+=head2 test($path)
+
+Try a test request against C<$path>.  Returns the result of the request,
+or dies on failure.
+
+=cut
+    
 sub test($){
     my $path = shift;
     my $uri = URI->new;
     $uri->path($path);
-    _dispatch $uri;
-    return "Hello, world!";
+    return request($uri);
+}
+    
+sub request($){
+    my $uri = shift;
+    my $path = $uri->path;
+    
+    # clear request globals;
+    $output = "";
+    %stash = ();
+
+    my $action = eval {
+	_dispatch $uri;
+    };
+    die "Error getting action for $path: $@" if($@ || !$action);
+
+    my $result;
+    eval {
+      actionexec: {
+	    $result = $action->();
+	    return;
+	}
+	return $result = $output;
+    };
+    die "Error executing action: $@" if $@;
+    
+    return $result;
 }
 
 ## setup
 
 my %templates;
 sub _load_templates(){
-    my $templates = do { local $/; <main::DATA> };
+    my $templates = do { local $/; <DATA> ."\n". <main::DATA> };
     return unless $templates;
     my @lines = split/\n/, $templates;
     my $line_count = 1;
@@ -340,6 +392,7 @@ sub start() {
     # print templates
     my $templates = Text::SimpleTable->new([15, 'name'], [65, 'summary']);
     foreach my $template (keys %templates){
+	next if $template =~ /^_/; # internal use only
 	my $t = $templates{$template};
 	$t =~ /(.{0,65})/;
 	$templates->row($template, $1);
@@ -417,3 +470,50 @@ use overload
   '""' => sub { return "xhtml" },
   '++' => sub { return "xml"   };
 1;
+
+package Resting;
+# HTML that we use internally
+
+__DATA__
+___html__
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+"http://www.w3.org/TR/html4/loose.dtd">
+<html>
+  <head>[% internal.head %]</head>
+  <body>[% internal.body %]</body>
+</html>
+___xhtml__
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html>
+  <head>[% internal.head %]</head>
+  <body>[% internal.body %]</body>
+</html>
+___xml__
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+                      "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xml:lang="en">
+  <head>[% internal.head %]</head>
+  <body>[% internal.body %]</body>
+</html>
+___frag_resting_messages__
+<div id="resting_messages">
+  [% IF errors %] <div class="errors">[% internal.errors %]</div>[% END %]
+  [% IF warnings %] <div class="messages">[% internal.warnings %]</div>[% END %]
+  [% IF messages %] <div class="messages">[% internal.messages %]</div>[% END %]
+</div>
+___frag_resting_menu__
+<div id="reseting_menu">
+[% internal.menu %]
+</div>
+___frag_css
+<style>
+  #resting_messages .errors {
+    color: red;
+  }
+</style>
+___frag_header
+[% internal.css %]
+<title>[% internal.title %]</title>
