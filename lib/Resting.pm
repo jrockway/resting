@@ -3,11 +3,15 @@ package Resting;
 use warnings;
 use strict;
 use base 'Exporter';
+use Carp;
 use CGI;
 use DBIx::Class;
 use Template;
+use URI;
+use Text::SimpleTable;
 
-our @EXPORT_OK = qw{application database table group page debug
+our @EXPORT_OK = qw{application database table group page
+                    debug message info warning error
 		    style doctype html xhtml
 		    after before everything
 		    insert all
@@ -16,21 +20,14 @@ our @EXPORT_OK = qw{application database table group page debug
 		    request stash method
 		    public group
 		    show form template
+                    start test
 		};
-  
-our @EXPORT    = @EXPORT_OK;
+our @EXPORT  = @EXPORT_OK;
+our $VERSION = '0.01';
 
 =head1 NAME
 
 Resting - micro web framework
-
-=head1 VERSION
-
-Version 0.01
-
-=cut
-
-our $VERSION = '0.01';
 
 =head1 SYNOPSIS
 
@@ -44,23 +41,47 @@ like L<Catalyst|Catalyst>.
 
 =cut
 
+# TODO
+#local $SIG{__DIE__} = sub {
+#    print {*STDERR} "fatal error: @_";
+#    exit(255);
+#};
+
 my $app_name = 'Resting';
 sub application(;$){
     $app_name = shift if $_[0];
     return $app_name;
 }
 
+## logging
 sub debug($) {
-    print {*STDERR} "$app_name: @_\n";
+    return if $ENV{NO_RESTING_DEBUG};
+    print {*STDERR} "[$app_name:$$][debug] @_\n";
+}
+sub warning($){
+    print {*STDERR} "[$app_name:$$][warn] @_\n";
+}
+sub message($){
+    print {*STDERR} "[$app_name:$$][message] @_\n";
+}
+sub error($){
+    print {*STDERR} "*** [$app_name:$$][error] @_\n";
+}
+sub info($){
+    print {*STDERR} "[$app_name:$$][info] @_\n";
 }
 
 ## page functions ##
 my %pages;
 sub page($@) {
     my $name   = shift;
-    my @params = @_;
+    my %params = @_;
     
     debug "Registering page $name";
+    $pages{$name} = {
+		     action   => ($params{action}   || $::{(caller)[0]}),
+		     template => ($params{template} || $name)
+		    };
 }
 
 ## database functions ##
@@ -216,18 +237,84 @@ sub stash($@){
     debug "Stashing $name";
 }
 
+my $request;
 sub request() {
-    return "Resting";
+    return "Resting"; # used like 
 }
 
 sub method() {
-    return "GET";
+    return $request->{method};
+}
+
+sub params() {
+    return $request->{params};
+}
+
+sub args() {
+    return @{$request->{args}||[]};
+}
+
+##
+sub _error($$){
+    my $code = shift;
+    my $msg  = shift;
+    return "Error $code: $msg\n";
+}
+
+sub _find_action($){
+    my $path = shift;
+    my ($action, @args);
+    do {
+	$action = $pages{$path};
+	last if $action;
+	$path =~ m{(.+)/([^/]+)};
+	$path = $1;
+	unshift @args, $2;
+    } while($path);
+    # todo: index, default
+    return ($action, @args);
+}
+
+## dispatcher
+
+## real functions
+
+sub _dispatch($) {
+    my $uri  = shift;
+    $request->{path} = $uri;
+    my $path = $uri->path;    
+
+    my ($action, @args) = _find_action $path;
+    return _error 404, "No action matching `$path'" if $@;
+    
+}
+
+sub test($){
+    my $path = shift;
+    my $uri = URI->new;
+    $uri->path($path);
+    _dispatch $uri;
+    return "Hello, world!";
 }
 
 ## main loop
+my $already_started = 0;
+sub start() {
+    $already_started = 1;
+    my $actions = Text::SimpleTable->new([15, 'page'], [15, 'template'], 
+					 [50, 'action']); 
+    foreach my $page (keys %pages){
+	$actions->row($page, $pages{$page}->{template}, $pages{$page}->{action});
+    }
+    debug "Loaded pages";
+    debug "\n". $actions->draw();
+    debug "$app_name initialized!  Starting.";    
+}
 
 END {
-    debug "$app_name initialized!  Starting.";
+    return if(scalar keys %pages == 0); # nothing to do
+    # auto-start the app if start() isn't explicitly called
+    start unless $already_started;
 }
 
 
