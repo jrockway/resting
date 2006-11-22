@@ -10,10 +10,10 @@ application 'test';
 page 'index';
 
 sub index {
+    stash who => 'world';
     show template 'index';
 }
 
 __DATA__
 __index__
-Hello, world!
-
+Hello, [% who %]!
