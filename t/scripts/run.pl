@@ -7,13 +7,24 @@ use warnings;
 use Resting;
 
 application 'test';
-page 'index';
 
+page 'default',
+  template => 'not_found';
+
+page 'index';
 sub index {
     stash who => 'world';
     show template 'index';
 }
 
+page 'test'; 
+#  action => sub { show template 'test' };
+
 __DATA__
 __index__
 Hello, [% who %]!
+__test__
+The test works!  Hooray for the "test" action!
+__not_found__
+404 Not found: The page you're looking for doesn't exist.
+  

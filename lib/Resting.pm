@@ -29,11 +29,6 @@ our @EXPORT_OK = qw{application database table group page
 our @EXPORT  = @EXPORT_OK;
 our $VERSION = '0.01';
 
-#sub import {
-#    my $class = shift;
-#    return $class->export_to_level(2, @_);
-#}
-
 =head1 NAME
 
 Resting - micro web framework
@@ -69,11 +64,9 @@ my $request;
 my %templates;
 my $already_started = 0;
 
-
 ## signal handlers
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
 $SIG{__DIE__}  = sub { $errors = 1; my $m=shift; chomp $m; fatal($m); };
-
 
 sub application(;$){
     $app_name = shift if $_[0];
@@ -112,15 +105,26 @@ sub info($){
 sub page($@) {
     my $name   = shift;
     my %params = @_;
-    
+
     debug "Registering page $name";
-    $pages{$name} = \%params;
     
-    $pages{$name}->{template} ||= $name;
-    $pages{$name}->{action}   ||= \&{(caller)[0]."::$name"}
-      || sub { show(template($name)) };
+    my $page = \%params;
+    $page->{template} ||= $name;
+    $page->{action}   ||= main->can($name);
+
+    if($page->{action} && Resting->can($name) && 
+       $page->{action} == Resting->can($name)){
+	warning "Action for $name conflicts with Resting's internals!";
+	delete $page->{action};
+    }
     
-    return $pages{$name};
+    if(!$page->{action} && $page->{template}){
+	$page->{action} = sub { show(template($pages{$name}->{template}))};
+    }
+
+    croak "No action specified for $name" if !$page->{action};
+    
+    return $pages{$name} = $page;
 }
 
 ## database  functions ##
@@ -219,9 +223,7 @@ sub show($){
 	$output = _render_template($what);
     };
     die "Couldn't render template $what: $@" if $@;
-    
-    no warnings; # yes, I'm exiting subroutine via last.  sue me.
-    last actionexec;
+    goto actionexec;
 }
 
 sub _render_template($){
@@ -335,10 +337,9 @@ sub args() {
 ## dispatcher
 
 sub _dispatch($) {
-    my $uri  = shift;
-    $request->{path} = $uri;
-    my $path = $uri->path;    
-
+    my $path  = shift;
+    $request->{path} = $path;
+    
     my ($action, @args) = _find_action($path);
     return sub { $action->{action}->(@args, @_) };
 }
@@ -360,12 +361,17 @@ sub _find_action($){
 	$action = $pages{"$path/default"};
 	last if $action;
 	
-	$path =~ m{(.+)/([^/]+)}; #};
-	$path = $1;
-	unshift @args, $2;
+	if($path =~ m{^(.+)/([^/]*)$}){
+	    $path = $1;
+	    unshift @args, $2;
+	}
+	else {
+	    $path = "";
+	}
     };
-    
-    die "No action found for $orig_path" unless $action;
+
+    $action = $pages{default} if !$action;
+    die "No action found for $orig_path" if !$action;
     
     return ($action, @args);
 }
@@ -381,12 +387,15 @@ or dies on failure.
 =cut
     
 sub test($){
-    my $path = shift;
-    my $uri = URI->new;
+    my $path = shift;    
+    my $uri  = URI->new;
     $uri->path($path);
+    
+    croak "Must request a path" if !$path;
+    debug "Request for @{[$uri->as_string]}";
     return _request($uri);
 }
-    
+
 sub _request($){
     my $uri = shift;
     my $path = $uri->path;
@@ -395,21 +404,22 @@ sub _request($){
     # clear request globals;
     $output = "";
     %stash = ();
+    $request = {uri => $uri, path => $path};
     
     my $action = eval {
-	_dispatch $uri;
+	_dispatch $path;
     };
     die "Error getting action for $path: $@" if($@ || !$action);
 
     my $result;
     eval {
+	$result = $action->();
+	return;
       actionexec:
-	{
-	    $result = $action->();
-	}
+	$result = $output;
     };
     die "Error executing action: $@" if $@;
-    return $result = $output || $result;
+    return $result;
 }
 
 ## setup
@@ -427,7 +437,8 @@ sub _load_templates(){
 	    $cur_template = $1;
 	}
 	else {
-	    die "invalid template format at __DATA__:$line_count" if !$cur_template; 
+	    die "invalid template format at __DATA__:$line_count" 
+	      if !$cur_template; 
 	    $templates{$cur_template} .= $line;
 	}
 	$line_count++;
@@ -436,8 +447,14 @@ sub _load_templates(){
 
 ## main loop
 sub start() {
+    return if $already_started;
     $already_started = 1;
+
+    # load everything
     _load_templates();
+
+    # setup cookies
+    # setup request object
     
     # print actions
     my $actions = Text::SimpleTable->new([14, 'page'], [14, 'template'], 
@@ -458,7 +475,7 @@ sub start() {
     # print database tables
     debug "Loaded pages\n". $actions->draw();
     debug "Loaded templates\n". $templates->draw();
-    debug "$app_name initialized!  Starting.";    
+    info "$app_name initialized!  Starting.";    
 }
 
 END {
@@ -562,15 +579,15 @@ ___frag_resting_messages__
   [% IF messages %] <div class="messages">[% internal.messages %]</div>[% END %]
 </div>
 ___frag_resting_menu__
-<div id="reseting_menu">
+<div id="resting_menu">
 [% internal.menu %]
 </div>
-___frag_css
+___frag_css__
 <style>
   #resting_messages .errors {
     color: red;
   }
 </style>
-___frag_header
+___frag_header__
 [% internal.css %]
 <title>[% internal.title %]</title>
