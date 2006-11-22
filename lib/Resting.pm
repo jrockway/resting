@@ -60,6 +60,7 @@ my %stash;
 my %flash;
 my $request;
 my %templates;
+my $template;
 my $already_started = 0;
 
 ## signal handlers
@@ -241,8 +242,9 @@ sub _render_template($){
 
 
 sub template($){
-    my $template = shift;
-    return {template => $template};
+    my $_template = shift;
+    $template = $_template if $_template;
+    return {template => $_template};
 }
 
 sub form($){
@@ -415,6 +417,8 @@ sub _request($){
     my $result;
     eval {
 	$result = $action->();
+	stash('_result', $result);
+	$result = show($template) || $result;
 	return;
       actionexec:
 	$result = $output;

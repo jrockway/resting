@@ -17,8 +17,20 @@ sub index {
     show template 'index';
 }
 
-page 'test'; 
-#  action => sub { show template 'test' };
+page 'arguments',
+  action => sub {
+      my $arg = shift;
+      if($arg == 1){
+	  template 'arg_1';
+      }
+      else {
+	  template 'arg_2';
+      }
+      stash text => 'Argument';
+  };
+
+page 'test',
+  action => sub { show template 'test' };
 
 __DATA__
 __index__
@@ -27,4 +39,7 @@ __test__
 The test works!  Hooray for the "test" action!
 __not_found__
 404 Not found: The page you're looking for doesn't exist.
-  
+__arg_1__
+[% text %] 1
+__arg_2__
+[% text %] 2
