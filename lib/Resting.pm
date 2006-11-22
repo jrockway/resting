@@ -361,7 +361,7 @@ sub _find_action($){
 
 
     while(!$action && $path){
-	
+	#debug "Path: $path (@args)";
 	# "index" and "default" becomes an arguments
 	while($path =~ m{^(.*)/?(index|default)$}){
 	    $path = $1;
@@ -379,7 +379,7 @@ sub _find_action($){
 	# failing that, strip off an argument, and try again
 	if($path =~ m{^(.+)/([^/]*)$}){
 	    $path = $1;
-	    unshift @args, $2;
+	    unshift @args, $2 if $2;
 	}
 	else {
 	    unshift @args, $path;
