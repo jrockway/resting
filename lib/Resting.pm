@@ -62,6 +62,7 @@ my $request;
 my %templates;
 my $template;
 my $already_started = 0;
+my @_args;
 
 ## signal handlers
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
@@ -220,7 +221,6 @@ sub show($){
     my $what = shift;
     $what = $what->{template} if ref $what;
     
-    debug "Rendering $what";
     eval {
 	$output = _render_template($what);
     };
@@ -344,7 +344,7 @@ sub _dispatch($) {
     $request->{path} = $path;
     
     my ($action, @args) = _find_action($path);
-    debug "arguments are ". join ',', map {"{$_}"} @args;
+    @_args = @args; 
     return sub { $action->{action}->(@args, @_) };
 }
 
@@ -409,10 +409,10 @@ sub test($){
     $uri->path($path);
     
     croak "Must request a path" if !$path;
-    debug "Request for @{[$uri->as_string]}";
     return _request($uri);
 }
 
+my $request_count = 0;
 sub _request($){
     my $uri = shift;
     my $path = $uri->path;
@@ -422,22 +422,37 @@ sub _request($){
     $output = "";
     %stash = ();
     $request = {uri => $uri, path => $path};
+    @_args = ();
     
+    my $rt = Text::SimpleTable->new([28, 'action'], 
+				    [42, 'details']);
     my $action = eval {
 	_dispatch $path;
     };
     die "Error getting action for $path: $@" if($@ || !$action);
 
+
+    my $args = @_args ? "arguments ". join ',', map {"{$_}"} @_args
+      : "no arguments";
+    $rt->row("run $action", $args);
+    
     my $result;
     eval {
 	$result = $action->();
 	stash('_result', $result);
-	$result = show($template) || $result;
+	$result = _render_template($template) || $result;
+	$rt->row('render template', $template);
 	return;
       actionexec:
+	$rt->row('detach', q{});
+	$rt->row('render template', $template);
 	$result = $output;
     };
     die "Error executing action: $@" if $@;
+    
+    $request_count++;
+    debug "Request for @{[$uri->as_string]} [$request_count]:\n". $rt->draw;
+    
     return $result;
 }
 
