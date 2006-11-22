@@ -10,7 +10,9 @@ use CGI;
 use DBIx::Class;
 use Template;
 use URI;
+use Symbol;
 use Text::SimpleTable;
+use Template;
 
 our @EXPORT_OK = qw{application database table group page
                     debug message info warning error
@@ -26,6 +28,11 @@ our @EXPORT_OK = qw{application database table group page
 		};
 our @EXPORT  = @EXPORT_OK;
 our $VERSION = '0.01';
+
+#sub import {
+#    my $class = shift;
+#    return $class->export_to_level(2, @_);
+#}
 
 =head1 NAME
 
@@ -43,9 +50,29 @@ like L<Catalyst|Catalyst>.
 
 =cut
 
+## 'global' variables
 my $app_name = 'Resting';
+my $errors = 0;
+my %pages;
+my $database;
+my %tables;
+my %groups;
+my $output;
+my $html = 'xhtml'; 
+my $doctype = bless \$html => 'xhtml';
+my %style;
+my @before;
+my @after;
+my %stash;
+my %flash;
+my $request;
+my %templates;
+my $already_started = 0;
+
+
+## signal handlers
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
-$SIG{__DIE__}  = sub { my $m=shift; chomp $m; fatal($m); };
+$SIG{__DIE__}  = sub { $errors = 1; my $m=shift; chomp $m; fatal($m); };
 
 
 sub application(;$){
@@ -73,6 +100,7 @@ sub error($){
 # kills program
 sub fatal($){
     print {*STDERR} "[$app_name:$$][fatal] *** @_\n";
+    local $SIG{__DIE__};
     die(@_);
 }
 sub info($){
@@ -80,28 +108,31 @@ sub info($){
 }
 
 ## page functions ##
-my %pages;
+
 sub page($@) {
     my $name   = shift;
     my %params = @_;
     
     debug "Registering page $name";
-    $pages{$name} = {
-		     action   => ($params{action}   || \&{(caller)[0]."::$name"}),
-		     template => ($params{template} || $name)
-		    };
+    $pages{$name} = \%params;
+    
+    $pages{$name}->{template} ||= $name;
+    $pages{$name}->{action}   ||= \&{(caller)[0]."::$name"}
+      || sub { show(template($name)) };
+    
+    return $pages{$name};
 }
 
-## database functions ##
+## database  functions ##
 
-my $database;
+
 sub database(;$) {
     my $connect_info = shift;
     $database = $connect_info if $connect_info;
     return $database;
 }
 
-my %tables;
+
 sub table($@){
     my $name = shift;
     my %cols = @_;
@@ -167,7 +198,7 @@ sub insert($$){
 
 ## acl stuff ##
 
-my %groups;
+
 sub group($){
     my $name = shift;
     debug "Registering group $name";
@@ -178,17 +209,36 @@ sub public(){
 }
 
 ## template stuff
-my $output;
+
 sub show($){
     my $what = shift;
-    $output = "showing $what";
+    $what = $what->{template} if ref $what;
+    
+    debug "Rendering $what";
+    eval {
+	$output = _render_template($what);
+    };
+    die "Couldn't render template $what: $@" if $@;
+    
+    no warnings; # yes, I'm exiting subroutine via last.  sue me.
     last actionexec;
 }
 
-my $template;
+sub _render_template($){
+    my $template = shift;
+    my $tt = Template->new({EVAL_PERL => 1});
+    my $vars = \%stash;
+
+    my $result;
+    $template = $templates{$template};
+    $tt->process(\$template, $vars, \$result)
+      || die $tt->error();
+    return $result;
+}
+
+
 sub template($){
-    my $_template = shift;
-    $template = $_template if $_template;
+    my $template = shift;
     return {template => $template};
 }
 
@@ -199,15 +249,15 @@ sub form($){
 }
 
 ## generated HTML stuff
-my $html = 'xhtml';
-my $doctype = bless \$html => 'xhtml';
+
+
 sub doctype(;$){
     $doctype = $_[0];
     debug "Doctype is set to $doctype";
     return $doctype;
 }
 
-my %style;
+
 sub style($$){
     # need to merge hashes here
     debug "adding style info";
@@ -224,26 +274,31 @@ sub xhtml() : lvalue {
     return $ref;
 };
 
+# nothing more specific yet
 sub everything($){
-    return $_[0];
+    return  $_[0];
 }
+
+
 
 sub before($){
     my $template = shift;
-    debug "Will print '$template' before content";
+    push @before, $template if $template;
+    return @before if wantarray;
     return $template;
 }
 
 sub after($){
     my $template = shift;
-    debug "Will print '$template' after content";
+    push @after, $template if $template;
+    return @after if wantarray;
     return $template;
 }
 
 
 ## request stuff
 
-my %stash;
+
 sub stash(;$$){
     my $name = shift;
     if($name){
@@ -253,7 +308,7 @@ sub stash(;$$){
     return \%stash;
 }
 
-my %flash;
+
 sub flash(;$$){
     my $name = shift;
     if($name){
@@ -263,7 +318,7 @@ sub flash(;$$){
     return \%flash;
 }
 
-my $request;
+
 sub method() {
     return $request->{method};
 }
@@ -285,7 +340,7 @@ sub _dispatch($) {
     my $path = $uri->path;    
 
     my ($action, @args) = _find_action($path);
-    return sub { $action->(@args) };
+    return sub { $action->{action}->(@args, @_) };
 }
 
 sub _find_action($){
@@ -295,7 +350,9 @@ sub _find_action($){
     
     $path =~ s{^/}{};
 
-    $action = $pages{"$path/index"};
+    $action = $pages{index};
+    $action = $pages{"$path/index"} if $path;
+    
     while(!$action && $path){
 	$action = $pages{$path};
 	last if $action;
@@ -310,7 +367,6 @@ sub _find_action($){
     
     die "No action found for $orig_path" unless $action;
     
-    # todo: index, default
     return ($action, @args);
 }
 
@@ -328,17 +384,18 @@ sub test($){
     my $path = shift;
     my $uri = URI->new;
     $uri->path($path);
-    return request($uri);
+    return _request($uri);
 }
     
-sub request($){
+sub _request($){
     my $uri = shift;
     my $path = $uri->path;
+    start();
     
     # clear request globals;
     $output = "";
     %stash = ();
-
+    
     my $action = eval {
 	_dispatch $uri;
     };
@@ -346,22 +403,20 @@ sub request($){
 
     my $result;
     eval {
-      actionexec: {
+      actionexec:
+	{
 	    $result = $action->();
-	    return;
 	}
-	return $result = $output;
     };
     die "Error executing action: $@" if $@;
-    
-    return $result;
+    return $result = $output || $result;
 }
 
 ## setup
 
-my %templates;
+
 sub _load_templates(){
-    my $templates = do { local $/; <DATA> ."\n". <main::DATA> };
+    my $templates = do { no warnings; local $/; <DATA> ."\n". <main::DATA> };
     return unless $templates;
     my @lines = split/\n/, $templates;
     my $line_count = 1;
@@ -380,24 +435,23 @@ sub _load_templates(){
 }
 
 ## main loop
-my $already_started = 0;
 sub start() {
     $already_started = 1;
     _load_templates();
     
     # print actions
-    my $actions = Text::SimpleTable->new([15, 'page'], [15, 'template'], 
-					 [47, 'action']); 
+    my $actions = Text::SimpleTable->new([14, 'page'], [14, 'template'], 
+					 [40, 'action']); 
     foreach my $page (keys %pages){
 	$actions->row($page, $pages{$page}->{template}, $pages{$page}->{action});
     }
 
     # print templates
-    my $templates = Text::SimpleTable->new([15, 'name'], [65, 'summary']);
+    my $templates = Text::SimpleTable->new([14, 'name'], [57, 'summary']);
     foreach my $template (keys %templates){
 	next if $template =~ /^_/; # internal use only
 	my $t = $templates{$template};
-	$t =~ /(.{0,65})/;
+	$t =~ /(.{0,57})/;
 	$templates->row($template, $1);
     }
     

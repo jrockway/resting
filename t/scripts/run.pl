@@ -9,7 +9,11 @@ use Resting;
 application 'test';
 page 'index';
 
+sub index {
+    show template 'index';
+}
+
 __DATA__
 __index__
-Hello, world
+Hello, world!
 
