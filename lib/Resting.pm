@@ -10,9 +10,7 @@ use CGI;
 use DBIx::Class;
 use Template;
 use URI;
-use Symbol;
 use Text::SimpleTable;
-use Template;
 
 our @EXPORT_OK = qw{application database table group page
                     debug message info warning error
@@ -74,30 +72,33 @@ sub application(;$){
 }
 
 ## logging
-sub debug($) {
-    return if $ENV{NO_RESTING_DEBUG};
-    print {*STDERR} "[$app_name:$$][debug] @_\n";
+
+sub _msg($;@){
+    return if !$ENV{RESTING_DEBUG};
+    my $level = shift;
+    print {*STDERR} "[$app_name:$$][$level] @_\n";
 }
-sub warning($){
-    print {*STDERR} "[$app_name:$$][warn] @_\n";
-}
-sub message($){
-    print {*STDERR} "[$app_name:$$][message] @_\n";
-}
+
+sub debug($)  { _msg('debug',@_) }
+sub warning($){ _msg('warn', @_)  }
+sub message($){ _msg('message', @_) }
+
 # kills request
 sub error($){
-    print {*STDERR} "[$app_name:$$][error] @_\n";
+    _msg('error', @_);
     local $SIG{__DIE__};
     die @_; # eval can trap this
 }
+
 # kills program
 sub fatal($){
-    print {*STDERR} "[$app_name:$$][fatal] *** @_\n";
+    _msg('fatal'," *** @_");
     local $SIG{__DIE__};
     die(@_);
 }
+
 sub info($){
-    print {*STDERR} "[$app_name:$$][info] @_\n";
+    _msg('info', @_);
 }
 
 ## page functions ##
@@ -460,7 +461,9 @@ sub start() {
     my $actions = Text::SimpleTable->new([14, 'page'], [14, 'template'], 
 					 [40, 'action']); 
     foreach my $page (keys %pages){
-	$actions->row($page, $pages{$page}->{template}, $pages{$page}->{action});
+	$actions->row($page, $pages{$page}->{template}, 
+		      $pages{$page}->{action});
+	
     }
 
     # print templates
