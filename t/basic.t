@@ -2,7 +2,7 @@
 # basic.t
 # Copyright (c) 2006 Jonathan Rockway <jrockway@cpan.org>
 
-use Test::More tests => 10;
+use Test::More tests => 11;
 use FindBin qw($Bin);
 use File::Spec;
 
@@ -51,3 +51,12 @@ ok(do($test), "start $test");
     # not the foo index!
     unlike($output, qr/This is the foo index./i, 'should not be foo index');
 }
+
+# test matching the literal index action
+{
+    my $output = test('/foo/index');
+    # not the foo index!
+    unlike($output, qr/This is the foo index./i, 
+	   '/foo/index should not be foo index');
+}
+

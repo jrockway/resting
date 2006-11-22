@@ -355,20 +355,28 @@ sub _find_action($){
     
     $path =~ s{^/}{};
     $path =~ s{/$}{};
-    #$path =~ s{/?index$}{};   # index isn't a real path
-    #$path =~ s{/?default$}{}; # default isn't a real path
 
     $action = $pages{index};
     $action = $pages{"$path/index"} if $path;
 
 
     while(!$action && $path){
+	
+	# "index" and "default" becomes an arguments
+	while($path =~ m{^(.*)/?(index|default)$}){
+	    $path = $1;
+	    unshift @args, $2;
+	}
+	
+	# try matching the literal path
 	$action = $pages{$path};
 	last if $action;
-
+	
+	# or perhaps the nearest default action
 	$action = $pages{"$path/default"};
 	last if $action;
 	
+	# failing that, strip off an argument, and try again
 	if($path =~ m{^(.+)/([^/]*)$}){
 	    $path = $1;
 	    unshift @args, $2;
@@ -378,7 +386,7 @@ sub _find_action($){
 	    $path = "";
 	}
     };
-
+    
     $action = $pages{default} if !$action;
     die "No action found for $orig_path" if !$action;
     
