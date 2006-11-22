@@ -344,6 +344,7 @@ sub _dispatch($) {
     $request->{path} = $path;
     
     my ($action, @args) = _find_action($path);
+    debug "arguments are ". join ',', map {"{$_}"} @args;
     return sub { $action->{action}->(@args, @_) };
 }
 
@@ -353,10 +354,14 @@ sub _find_action($){
     my $orig_path = $path;
     
     $path =~ s{^/}{};
+    $path =~ s{/$}{};
+    #$path =~ s{/?index$}{};   # index isn't a real path
+    #$path =~ s{/?default$}{}; # default isn't a real path
 
     $action = $pages{index};
     $action = $pages{"$path/index"} if $path;
-    
+
+
     while(!$action && $path){
 	$action = $pages{$path};
 	last if $action;
@@ -369,6 +374,7 @@ sub _find_action($){
 	    unshift @args, $2;
 	}
 	else {
+	    unshift @args, $path;
 	    $path = "";
 	}
     };
@@ -462,17 +468,30 @@ sub start() {
     # setup request object
     
     # print actions
-    my $actions = Text::SimpleTable->new([14, 'page'], [14, 'template'], 
-					 [40, 'action']); 
-    foreach my $page (keys %pages){
-	$actions->row($page, $pages{$page}->{template}, 
+    my $actions = Text::SimpleTable->new([14, 'page'], 
+					 [14, 'path'],
+					 [14, 'template'], 
+					 [23, 'action']); 
+    foreach my $page (sort keys %pages){
+	my $title = $page;
+	if ($title =~ m{(.*)(?:^|/)index$}) {
+	    $title = "$1/";
+	}
+	elsif($title =~ m{(.*)/?default}){
+	    $title = "$1/*";
+	}
+	if($title !~ m{^/}){
+	    $title = "/$title";
+	}
+	
+	$actions->row($page, $title, $pages{$page}->{template}, 
 		      $pages{$page}->{action});
 	
     }
 
     # print templates
     my $templates = Text::SimpleTable->new([14, 'name'], [57, 'summary']);
-    foreach my $template (keys %templates){
+    foreach my $template (sort keys %templates){
 	next if $template =~ /^_/; # internal use only
 	my $t = $templates{$template};
 	$t =~ /(.{0,57})/;

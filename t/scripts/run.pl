@@ -32,6 +32,9 @@ page 'arguments',
 page 'test',
   action => sub { show template 'test' };
 
+page 'foo/index',
+  template => 'foo';
+
 __DATA__
 __index__
 Hello, [% who %]!
@@ -43,3 +46,5 @@ __arg_1__
 [% text %] 1
 __arg_2__
 [% text %] 2
+__foo__
+This is the foo index.

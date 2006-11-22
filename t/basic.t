@@ -2,7 +2,7 @@
 # basic.t
 # Copyright (c) 2006 Jonathan Rockway <jrockway@cpan.org>
 
-use Test::More tests => 7;
+use Test::More tests => 10;
 use FindBin qw($Bin);
 use File::Spec;
 
@@ -29,10 +29,25 @@ ok(do($test), "start $test");
 # as well as arguments
 {
     my $output = test('/arguments/1');
-    like($output, qr/Argument 1/i);
+    like($output, qr/Argument 1/i, 'arguments/1');
 }
 
 {
     my $output = test('/arguments/2');
-    like($output, qr/Argument 2/i);
+    like($output, qr/Argument 2/i, 'arguments/2');
+}
+
+# test non-root paths
+{
+    my $output = test('/foo');
+    like($output, qr/This is the foo index./i, 'real foo index');
+}
+{
+    my $output = test('/foo/');
+    like($output, qr/This is the foo index./i, 'real foo index');
+}
+{
+    my $output = test('/foo/1/2');
+    # not the foo index!
+    unlike($output, qr/This is the foo index./i, 'should not be foo index');
 }
