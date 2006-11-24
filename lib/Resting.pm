@@ -11,6 +11,7 @@ use DBIx::Class;
 use Template;
 use URI;
 use Text::SimpleTable;
+use HTTP::Daemon;
 
 our @EXPORT_OK = qw{application database table group page
                     debug message info warning error
@@ -62,6 +63,7 @@ my %templates;
 my $template;
 my $already_started = 0;
 my $req_table;
+my %sessions;
 
 ## signal handlers
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
@@ -370,6 +372,13 @@ sub _find_action($){
     return ($action, @args);
 }
 
+# given an HTTP::Request, generate an HTTP::Response
+sub request($){
+    my $request = shift;
+    my $uri     = $request->uri;
+    my $path    = $uri->path;
+    my $result  = _request($path);
+}
 
 my $request_count = 0;
 sub _request($){
@@ -436,7 +445,7 @@ sub _finalize_output($){
 sub _load_templates(){
     my $templates = do { no warnings; local $/; <DATA> ."\n". <main::DATA> };
     return unless $templates;
-    my @lines = split/\n/, $templates;
+    my @lines = split/\n+/, $templates;
     my $line_count = 1;
     my $cur_template;
 
@@ -447,7 +456,7 @@ sub _load_templates(){
 	else {
 	    die "invalid template format at __DATA__:$line_count" 
 	      if !$cur_template; 
-	    $templates{$cur_template} .= $line;
+	    $templates{$cur_template} .= "$line\n";
 	}
 	$line_count++;
     }
@@ -635,21 +644,21 @@ ___main__
   [% FOREACH script = Resting.scripts -%]
    <script type="text/javascript" src="[% script %]">
   [% END -%]
-  [% PROCESS resting_styles %]
+  [% PROCESS resting_styles -%]
  </head>
   <body>
-  [% PROCESS resting_messages %]
-  [% Resting.body %]
+  [% PROCESS resting_messages -%]
+  [% Resting.body -%]
  </body>
 </html>
 
-[% BLOCK resting_messages %]
+[% BLOCK resting_messages -%]
 <div id="resting_messages">
-  [% IF Resting.errors   %] <div class="errors">  [% Resting.errors %]  </div>[% END %]
-  [% IF Resting.warnings %] <div class="messages">[% Resting.warnings %]</div>[% END %]
-  [% IF Resting.messages %] <div class="messages">[% Resting.messages %]</div>[% END %]
+  [% IF Resting.errors   %] <div class="errors">  [% Resting.errors %]  </div>[% END -%]
+  [% IF Resting.warnings %] <div class="messages">[% Resting.warnings %]</div>[% END -%]
+  [% IF Resting.messages %] <div class="messages">[% Resting.messages %]</div>[% END -%]
 </div>
-[% END %]
+[% END -%]
 
 [% BLOCK resting_menu %]
 <div id="resting_menu">
