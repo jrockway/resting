@@ -262,7 +262,6 @@ sub form($){
 
 ## generated HTML stuff
 
-
 sub doctype(;$){
     $doctype = $_[0];
     debug "Doctype is set to $doctype";
@@ -286,31 +285,7 @@ sub xhtml() : lvalue {
     return $ref;
 };
 
-# nothing more specific yet
-sub everything($){
-    return  $_[0];
-}
-
-
-
-sub before($){
-    my $template = shift;
-    push @before, $template if $template;
-    return @before if wantarray;
-    return $template;
-}
-
-sub after($){
-    my $template = shift;
-    push @after, $template if $template;
-    return @after if wantarray;
-    return $template;
-}
-
-
 ## request stuff
-
-
 sub stash(;$$){
     my $name = shift;
     if($name){
