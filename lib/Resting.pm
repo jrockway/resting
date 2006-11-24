@@ -238,10 +238,10 @@ sub _render_template($){
     my $template = shift;
     my $tt = Template->new({EVAL_PERL => 1});
     my $vars = \%stash;
+    $req_table->row('render template', $template);
 
     my $result;
     $template = $templates{$template};
-    $req_table->row('render template', $template);
     $tt->process(\$template, $vars, \$result)
       || die $tt->error();
     return $result;
