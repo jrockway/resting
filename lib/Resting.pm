@@ -260,25 +260,9 @@ sub form($){
 }
 
 ## generated HTML stuff
-
-sub doctype(;$){
-    $doctype = $_[0];
-    debug "Doctype is set to $doctype";
-    return $doctype;
-}
-
-
 sub style($$){
     # need to merge hashes here
     debug "adding style info";
-}
-
-sub html(){
-    return 'html';
-}
-
-sub xhtml() {
-    return 'xhtml';
 }
 
 ## request stuff
@@ -389,14 +373,16 @@ sub _find_action($){
 
 my $request_count = 0;
 sub _request($){
-    my $uri = shift;
+    my $uri  = shift;
     my $path = $uri->path;
     start();
+    $request_count++;
     
     # clear request globals;
     undef $output;
     undef %stash;
     undef $template;
+    
     $request = {uri => $uri, path => $path};
     $req_table = Text::SimpleTable->new([28, 'action'],[42, 'details']);
     
@@ -416,13 +402,11 @@ sub _request($){
 	$result = $output;
 	$result = _render_template($template) if template() && !$output;
     };
-    
-    $request_count++;
     debug "Request for @{[$uri->as_string]} [$request_count]:\n". 
       $req_table->draw;
-    
     error "Error executing action: $@" if $@;
-    
+
+    $result = _finalize_output($result);    
     return $result;
 }
 
@@ -432,6 +416,20 @@ sub _action_row {
       : "no arguments";
     
     $req_table->row("run $action", $args);
+}
+
+sub _finalize_output($){
+    my $in = shift;
+    my $result;
+    
+    my $tt  = Template->new;
+    my $stash = {%stash, Resting => {body => $in}};
+    my $template = $templates{_main};
+    
+    $tt->process(\$template, $stash, \$result)
+      or die "Error finalizing output: ". $tt->error;
+    
+    return $result;
 }
 
 ## setup
@@ -585,38 +583,43 @@ under the same terms as Perl itself.
 1; # End of Resting
 
 __DATA__
-___html__
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-"http://www.w3.org/TR/html4/loose.dtd">
-<html>
-  <head>[% internal.head %]</head>
-  <body>[% internal.body %]</body>
-</html>
-___xhtml__
+___main__
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
                       "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml"
       xml:lang="en">
-  <head>[% internal.head %]</head>
-  <body>[% internal.body %]</body>
+ <head>
+  <title>[% GET Resting.title %]</title>
+  [% FOREACH script = Resting.scripts -%]
+   <script type="text/javascript" src="[% script %]">
+  [% END -%]
+  [% PROCESS resting_styles %]
+ </head>
+  <body>
+  [% PROCESS resting_messages %]
+  [% Resting.body %]
+ </body>
 </html>
-___frag_resting_messages__
+
+[% BLOCK resting_messages %]
 <div id="resting_messages">
-  [% IF errors %] <div class="errors">[% internal.errors %]</div>[% END %]
-  [% IF warnings %] <div class="messages">[% internal.warnings %]</div>[% END %]
-  [% IF messages %] <div class="messages">[% internal.messages %]</div>[% END %]
+  [% IF Resting.errors   %] <div class="errors">  [% Resting.errors %]  </div>[% END %]
+  [% IF Resting.warnings %] <div class="messages">[% Resting.warnings %]</div>[% END %]
+  [% IF Resting.messages %] <div class="messages">[% Resting.messages %]</div>[% END %]
 </div>
-___frag_resting_menu__
+[% END %]
+
+[% BLOCK resting_menu %]
 <div id="resting_menu">
 [% internal.menu %]
 </div>
-___frag_css__
+[% END %]
+
+[% BLOCK resting_styles %]
 <style>
   #resting_messages .errors {
     color: red;
   }
 </style>
-___frag_header__
-[% internal.css %]
-<title>[% internal.title %]</title>
+[% END %]
