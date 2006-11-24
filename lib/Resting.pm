@@ -46,7 +46,6 @@ like L<Catalyst|Catalyst>.
 
 ## 'global' variables
 my $app_name = 'Resting';
-my $errors = 0;
 my %pages;
 my $database;
 my %tables;
@@ -67,7 +66,7 @@ my %sessions;
 
 ## signal handlers
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
-$SIG{__DIE__}  = sub { $errors = 1; my $m=shift; chomp $m; fatal($m); };
+#$SIG{__DIE__}  = sub { $errors = 1; my $m=shift; chomp $m; fatal($m); };
 
 sub application(;$){
     $app_name = shift if $_[0];
@@ -77,8 +76,8 @@ sub application(;$){
 ## logging
 
 sub _msg($;@){
-    return if !$ENV{RESTING_DEBUG};
     my $level = shift;
+    return if !$ENV{RESTING_DEBUG} && $level eq 'debug';
     print {*STDERR} "[$app_name:$$][$level] @_\n";
 }
 
@@ -289,7 +288,7 @@ sub flash(;$$){
 
 
 sub method() {
-    return $request->{method};
+    return eval { $request->can('method')->() };
 }
 
 sub params() {
@@ -374,15 +373,31 @@ sub _find_action($){
 
 # given an HTTP::Request, generate an HTTP::Response
 sub request($){
-    my $request = shift;
-    my $uri     = $request->uri;
-    my $path    = $uri->path;
-    my $result  = _request($path);
+    my $req = shift;
+    my $res = HTTP::Response->new;
+    my $result;
+
+    eval {
+	$result  = _request($req);
+    };
+    if($@){
+	if ($@ =~ /Not found/){
+	    $res->code(404);
+	}
+	$res->code(500);
+    }
+    else {
+	$res->code(200);
+	$res->content($result);
+    }
+    
+    return $res;
 }
 
 my $request_count = 0;
 sub _request($){
-    my $path = shift;
+    $request = shift;
+    my $path = $request->uri->path;
     start();
     $request_count++;
     
@@ -390,12 +405,13 @@ sub _request($){
     undef $output;
     undef %stash;
     undef $template;
-
+    
     $req_table = Text::SimpleTable->new([28, 'action'],[42, 'details']);
     
     my ($action, @args) = _find_action($path);     
     my $result;
-    eval {
+    eval {	
+	debug "here";
 	# run action
 	$result = _run_action($action->{name}, @args);
 	stash('_result', $result);
@@ -411,8 +427,8 @@ sub _request($){
     };
     debug "Request for '$path' [$request_count]:\n". 
       $req_table->draw;
-    error "Error executing action: $@" if $@;
-
+    die "Error executing action: $@" if $@;
+    
     $result = _finalize_output($result);    
     return $result;
 }
@@ -462,7 +478,7 @@ sub _load_templates(){
     }
 }
 
-## main loop
+# init the app
 sub start() {
     return if $already_started;
     $already_started = 1;
@@ -511,14 +527,22 @@ sub start() {
 }
 
 sub _server(){
-    my $d = HTTP::Daemon->new || die "Cannot start server";
-    print "Please contact me at: <URL:", $d->url, ">\n";
+    my $d = 
+      HTTP::Daemon->new(LocalPort => 3000) || 
+      HTTP::Daemon->new || # port 3000 is taken
+	  die "Cannot start server";
+    info "Server started at <". $d->url. ">.  Press C-c to abort.";
+    my $kids = 0;
+    local $SIG{CHLD} = 'IGNORE';
+    
     while (my $c = $d->accept) {
+	local $SIG{INT} = sub { debug "Aborting request"; last request };
+      request:
 	while (my $r = $c->get_request) {
-	    $c->sendtest
+	    debug "Request for ". $r->uri->path;
+	    $c->send_response(request($r));
 	}
 	$c->close;
-	undef $c;
     }
 }
 
@@ -533,7 +557,7 @@ sub _process_options(){
 	      );
 
     $ENV{RESTING_DEBUG} = 1 if $debug;
-
+    
     return {test => $test, server => $server};
 
 }
@@ -541,11 +565,11 @@ sub _process_options(){
 END {
     return if $already_started;
     return if(scalar keys %pages == 0); # nothing to do
-
+    
+    my $options = _process_options();
     # auto-start the app if start() isn't explicitly called
     start();
-    my $options = _process_options();
-        
+    
     if($options->{test}){
 	print test($options->{test});
 	exit(0);
@@ -572,9 +596,10 @@ sub test($){
     # clean up the URI a bit
     $uri->path($path); 
     $path = $uri->path;
-    
     croak "Must request a path" if !$path;
-    return _request($path);
+
+    my $req = HTTP::Request->new(TEST => $uri);    
+    return _request($req);
 }
 
 1;

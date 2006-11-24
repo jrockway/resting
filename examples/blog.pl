@@ -29,7 +29,7 @@ group 'admins';
 page index =>
   template => 'index',
   action   => \&index,
-  access   => public;
+  access   => 'public';
 
 page 'articles';
 # default action is &articles
