@@ -36,6 +36,8 @@ page 'articles';
 # default access is public
 # default template is 'articles'
 
+page test => action => sub { debug "heh"; while(1){ debug "heh"; sleep 1; }};
+
 page post  =>
   action   => \&post,
   access   => ['posters', 'admins'];

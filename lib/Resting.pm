@@ -374,23 +374,22 @@ sub _find_action($){
 # given an HTTP::Request, generate an HTTP::Response
 sub request($){
     my $req = shift;
-    my $res = HTTP::Response->new;
+    my $res = HTTP::Response->new(200);
     my $result;
 
     eval {
 	$result  = _request($req);
     };
-    if($@){
-	if ($@ =~ /Not found/){
+    if($@ && !$result){
+	$res->code(500);
+	
+	if ($@ =~ /N(o action|ot) found/){
 	    $res->code(404);
 	}
-	$res->code(500);
-    }
-    else {
-	$res->code(200);
-	$res->content($result);
+	$result = $@;
     }
     
+    $res->content($result);    
     return $res;
 }
 
@@ -527,23 +526,27 @@ sub start() {
 }
 
 sub _server(){
-    my $d = 
-      HTTP::Daemon->new(LocalPort => 3000) || 
-      HTTP::Daemon->new || # port 3000 is taken
-	  die "Cannot start server";
+    my $d = HTTP::Daemon->new || die "Cannot start server";
     info "Server started at <". $d->url. ">.  Press C-c to abort.";
     my $kids = 0;
-    local $SIG{CHLD} = 'IGNORE';
+    my $server_done;
     
-    while (my $c = $d->accept) {
-	local $SIG{INT} = sub { debug "Aborting request"; last request };
-      request:
-	while (my $r = $c->get_request) {
-	    debug "Request for ". $r->uri->path;
-	    $c->send_response(request($r));
+    local $SIG{INT} = sub { $server_done = 1 };    
+    while ((my $c = $d->accept) && !$server_done) {
+	while ((my $r = $c->get_request) && !$server_done) {
+	    local $SIG{INT} = sub { 
+		die "Action aborted by keyboard interrupt";
+	    };
+	    
+	    my $response = request($r);
+	    $c->send_response($response);
 	}
 	$c->close;
+	undef $c;
     }
+    
+    debug "Shutting down the server";
+    return;
 }
 
 sub _process_options(){
