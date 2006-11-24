@@ -21,7 +21,7 @@ our @EXPORT_OK = qw{application database table group page
 		    primary foreign key
 		    request stash method
 		    public group
-		    show form template
+		    detach show form template
                     start test
 		};
 our @EXPORT  = @EXPORT_OK;
@@ -217,6 +217,10 @@ sub public(){
 
 ## template stuff
 
+sub detach() {
+    goto actionexec;    
+}
+
 sub show($){
     my $what = shift;
     $what = $what->{template} if ref $what;
@@ -225,7 +229,7 @@ sub show($){
 	$output = _render_template($what);
     };
     die "Couldn't render template $what: $@" if $@;
-    goto actionexec;
+    detach();
 }
 
 sub _render_template($){
@@ -430,19 +434,25 @@ sub _request($){
 	_dispatch $path;
     };
     die "Error getting action for $path: $@" if($@ || !$action);
-
-
+    
+    
     my $args = @_args ? "arguments ". join ',', map {"{$_}"} @_args
       : "no arguments";
     $rt->row("run $action", $args);
     
     my $result;
     eval {
+	# run action
 	$result = $action->();
 	stash('_result', $result);
-	$result = _render_template($template) || $result;
+	
+	# render template
+	$result = _render_template($template);
 	$rt->row('render template', $template);
+
 	return;
+	
+	# if show(), etc. is called, jump here immediately
       actionexec:
 	$rt->row('detach', q{});
 	$rt->row('render template', $template);
