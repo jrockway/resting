@@ -5,9 +5,13 @@
 use strict;
 use warnings;
 use Resting;
-use Test::More tests => 1;
+use Test::More tests => 2;
 
-my $result = test('foo');
+my $result;
+$result = test('bar');
+ok($result, 'got bar');
+
+$result = test('foo');
 like($result, qr/foo=foo;bar=bar;baz=baz;/, 'forwarding as expected');
 
 BEGIN {
@@ -24,9 +28,9 @@ BEGIN {
 	};
     
     page 'bar', action => sub {
-	stash bar => 'bar';	
+	stash bar => 'bar';
     };
-
+    
     page 'baz', action => sub {
 	stash baz => 'BAZ!';
     };
@@ -39,3 +43,5 @@ __foo__
 foo=[% foo %];bar=[% bar %];baz=[% baz %];
 __default__
 ERROR
+__bar__
+bar

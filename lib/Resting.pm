@@ -21,7 +21,7 @@ our @EXPORT_OK = qw{application database table group page
 		    primary foreign key
 		    request stash method
 		    public group
-		    detach show form template
+		    detach forward show form template
                     start test
 		};
 our @EXPORT  = @EXPORT_OK;
@@ -62,7 +62,6 @@ my $request;
 my %templates;
 my $template;
 my $already_started = 0;
-my @_args;
 my $req_table;
 
 ## signal handlers
@@ -115,18 +114,22 @@ sub page($@) {
     my $page = \%params;
     $page->{template} ||= $name;
     $page->{action}   ||= main->can($name);
-    $page->{page}       = $name; # for display later
+    $page->{name}       = $name; # for display later
     
+    # check to make sure the user doesn't accidentally
+    # specify an exported sub as an action (test is a common one)
     if($page->{action} && Resting->can($name) && 
        $page->{action} == Resting->can($name)){
 	warning "Action for $name conflicts with Resting's internals!";
 	delete $page->{action};
     }
     
+    # if no action is specified, just render the template
     if(!$page->{action} && $page->{template}){
 	$page->{action} = sub { show(template($pages{$name}->{template}))};
     }
-
+    
+    # no action AND no template (?)
     croak "No action specified for $name" if !$page->{action};
     
     return $pages{$name} = $page;
@@ -219,10 +222,6 @@ sub public(){
 
 ## template stuff
 
-sub detach() {
-    goto actionexec;    
-}
-
 sub show($){
     my $what = shift;
     $what = $what->{template} if ref $what;
@@ -235,23 +234,24 @@ sub show($){
 }
 
 sub _render_template($){
-    my $template = shift;
+    my $template_name = shift;
+    die "No template to render" if !$template_name;
+
     my $tt = Template->new({EVAL_PERL => 1});
     my $vars = \%stash;
-    $req_table->row('render template', $template);
-
+    $req_table->row('render template', $template_name);
+    
     my $result;
-    $template = $templates{$template};
+    $template = $templates{$template_name};
     $tt->process(\$template, $vars, \$result)
       || die $tt->error();
     return $result;
 }
 
-
-sub template($){
+sub template(;$){
     my $_template = shift;
     $template = $_template if $_template;
-    return {template => $_template};
+    return $template;
 }
 
 sub form($){
@@ -346,13 +346,28 @@ sub args() {
 
 ## dispatcher
 
-sub _dispatch($) {
-    my $path  = shift;
-    $request->{path} = $path;
-    
-    my ($action, @args) = _find_action($path);
-    @_args = @args; 
-    return sub { $action->{action}->(@args, @_) };
+sub _run_action($;@){
+    my $name   = shift;
+    my @args   = @_;
+    my $action = $pages{$name};
+    die "Cannot run '$action': no action" if !$action->{action};
+    template($action->{template}) if !template(); # default template
+    _action_row($name, @args);
+    return $action->{action}->(@args);
+}
+
+sub detach(;$) {
+    my $where = shift;
+    forward($where) if($where);
+    $req_table->row('detach');
+    goto actionexec;    
+}
+
+# dispatch to private name
+sub forward($;@){
+    my $where = shift;
+    $req_table->row("forward to $where");
+    return _run_action($where, @_);
 }
 
 sub _find_action($){
@@ -396,28 +411,10 @@ sub _find_action($){
     
     $action = $pages{default} if !$action;
     die "No action found for $orig_path" if !$action;
-    
+
     return ($action, @args);
 }
 
-
-## misc exportable functions
-
-=head2 test($path)
-
-Try a test request against C<$path>.  Returns the result of the request,
-or dies on failure.
-
-=cut
-    
-sub test($){
-    my $path = shift;    
-    my $uri  = URI->new;
-    $uri->path($path);
-    
-    croak "Must request a path" if !$path;
-    return _request($uri);
-}
 
 my $request_count = 0;
 sub _request($){
@@ -426,38 +423,34 @@ sub _request($){
     start();
     
     # clear request globals;
-    $output = "";
-    %stash = ();
+    undef $output;
+    undef %stash;
+    undef $template;
     $request = {uri => $uri, path => $path};
-    @_args = ();
+    $req_table = Text::SimpleTable->new([28, 'action'],[42, 'details']);
     
-    $req_table = Text::SimpleTable->new([28, 'action'], 
-					[42, 'details']);
-    my $action = eval {
-	_dispatch $path;
-    };
-    die "Error getting action for $path: $@" if($@ || !$action);
-    
-    _action_row($action, @_args);
+    my ($action, @args) = _find_action($path);     
     my $result;
     eval {
 	# run action
-	$result = $action->();
+	$result = _run_action($action->{name}, @args);
 	stash('_result', $result);
 	
 	# render template
-	$result = _render_template($template);
+	$result = _render_template($template) if template();
 	return;
 	
 	# if show(), etc. is called, jump here immediately
       actionexec:
 	$result = $output;
+	$result = _render_template($template) if template() && !$output;
     };
-    die "Error executing action: $@" if $@;
     
     $request_count++;
     debug "Request for @{[$uri->as_string]} [$request_count]:\n". 
       $req_table->draw;
+    
+    error "Error executing action: $@" if $@;
     
     return $result;
 }
@@ -546,6 +539,25 @@ END {
     # auto-start the app if start() isn't explicitly called
     start unless $already_started;
 }
+
+## misc exportable functions
+
+=head2 test($path)
+
+Try a test request against C<$path>.  Returns the result of the request,
+or dies on failure.
+
+=cut
+    
+sub test($){
+    my $path = shift;    
+    my $uri  = URI->new;
+    $uri->path($path);
+    
+    croak "Must request a path" if !$path;
+    return _request($uri);
+}
+
 1;
 
 =head1 AUTHOR
