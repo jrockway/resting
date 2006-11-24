@@ -8,7 +8,7 @@ use Resting;
 
 application 'test';
 
-page 'default',
+page 'foo/default',
   template => 'not_found';
 
 page 'index';

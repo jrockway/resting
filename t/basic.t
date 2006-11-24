@@ -10,23 +10,29 @@ my $test = File::Spec->catfile($Bin, 'scripts', 'run.pl');
 ok(-e $test, 'test script exists');
 ok(do($test), "start $test");
 
+
+# test named action
 {
     my $output = test('/test');
     like($output, qr/The test works!/i, 'got test message');
 }
 
+# test (root) index action
 {
     my $output = test('/');
     like($output, qr/Hello, world!/i, 'got hello world');
 }
 
+# fallthrough without a root-level default action
 {
-    my $output = test('/this/does/not/exist');
-    like($output, qr/Not found/i, 'not found');
+    eval {
+	test('/this/does/not/exist');
+    };
+    ok($@, 'exception thrown when no action matches');
 }
 
 # these test template rendering when show() isn't called
-# as well as arguments
+# and also test arguments
 {
     my $output = test('/arguments/1');
     like($output, qr/Argument 1/i, 'arguments/1');
@@ -37,7 +43,7 @@ ok(do($test), "start $test");
     like($output, qr/Argument 2/i, 'arguments/2');
 }
 
-# test non-root paths
+# test non-root index
 {
     my $output = test('/foo');
     like($output, qr/This is the foo index./i, 'real foo index');
@@ -46,6 +52,8 @@ ok(do($test), "start $test");
     my $output = test('/foo/');
     like($output, qr/This is the foo index./i, 'real foo index');
 }
+
+# test non-root default action
 {
     my $output = test('/foo/1/2');
     # not the foo index!
