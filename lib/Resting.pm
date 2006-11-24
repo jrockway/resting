@@ -51,8 +51,7 @@ my $database;
 my %tables;
 my %groups;
 my $output;
-my $html = 'xhtml'; 
-my $doctype = bless \$html => 'xhtml';
+my $doctype = 'xhtml';
 my %style;
 my @before;
 my @after;
@@ -275,15 +274,12 @@ sub style($$){
 }
 
 sub html(){
-    return "html";
+    return 'html';
 }
 
-sub xhtml() : lvalue {
-    my $type = "xhtml";
-    my $ref = \$type;
-    bless $ref => 'xhtml'; # heh
-    return $ref;
-};
+sub xhtml() {
+    return 'xhtml';
+}
 
 ## request stuff
 sub stash(;$$){
@@ -588,16 +584,6 @@ under the same terms as Perl itself.
 
 1; # End of Resting
 
-package xhtml; # xhtml++ is xml 
-use overload 
-  fallback => 1, 
-  '""' => sub { ${$_[0]} },
-  '++' => sub { my $x = 'xml'; $_[0] = bless \$x };
-1;
-
-package Resting;
-# HTML that we use internally
-
 __DATA__
 ___html__
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
@@ -607,13 +593,6 @@ ___html__
   <body>[% internal.body %]</body>
 </html>
 ___xhtml__
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
-"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html>
-  <head>[% internal.head %]</head>
-  <body>[% internal.body %]</body>
-</html>
-___xml__
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
                       "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
