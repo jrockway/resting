@@ -63,6 +63,7 @@ my %templates;
 my $template;
 my $already_started = 0;
 my @_args;
+my $req_table;
 
 ## signal handlers
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
@@ -114,7 +115,7 @@ sub page($@) {
     my $page = \%params;
     $page->{template} ||= $name;
     $page->{action}   ||= main->can($name);
-
+    
     if($page->{action} && Resting->can($name) && 
        $page->{action} == Resting->can($name)){
 	warning "Action for $name conflicts with Resting's internals!";
@@ -239,6 +240,7 @@ sub _render_template($){
 
     my $result;
     $template = $templates{$template};
+    $req_table->row('render template', $template);
     $tt->process(\$template, $vars, \$result)
       || die $tt->error();
     return $result;
@@ -428,18 +430,14 @@ sub _request($){
     $request = {uri => $uri, path => $path};
     @_args = ();
     
-    my $rt = Text::SimpleTable->new([28, 'action'], 
-				    [42, 'details']);
+    $req_table = Text::SimpleTable->new([28, 'action'], 
+					[42, 'details']);
     my $action = eval {
 	_dispatch $path;
     };
     die "Error getting action for $path: $@" if($@ || !$action);
     
-    
-    my $args = @_args ? "arguments ". join ',', map {"{$_}"} @_args
-      : "no arguments";
-    $rt->row("run $action", $args);
-    
+    _action_row($action, @_args);
     my $result;
     eval {
 	# run action
@@ -448,22 +446,27 @@ sub _request($){
 	
 	# render template
 	$result = _render_template($template);
-	$rt->row('render template', $template);
-
 	return;
 	
 	# if show(), etc. is called, jump here immediately
       actionexec:
-	$rt->row('detach', q{});
-	$rt->row('render template', $template);
 	$result = $output;
     };
     die "Error executing action: $@" if $@;
     
     $request_count++;
-    debug "Request for @{[$uri->as_string]} [$request_count]:\n". $rt->draw;
+    debug "Request for @{[$uri->as_string]} [$request_count]:\n". 
+      $req_table->draw;
     
     return $result;
+}
+
+sub _action_row {
+    my $action = shift;
+    my $args = @_ ? "arguments ". join ',', map {"{$_}"} @_
+      : "no arguments";
+    
+    $req_table->row("run $action", $args);
 }
 
 ## setup
