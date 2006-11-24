@@ -115,6 +115,7 @@ sub page($@) {
     my $page = \%params;
     $page->{template} ||= $name;
     $page->{action}   ||= main->can($name);
+    $page->{page}       = $name; # for display later
     
     if($page->{action} && Resting->can($name) && 
        $page->{action} == Resting->can($name)){
