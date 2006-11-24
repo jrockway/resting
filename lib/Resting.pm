@@ -373,8 +373,7 @@ sub _find_action($){
 
 my $request_count = 0;
 sub _request($){
-    my $uri  = shift;
-    my $path = $uri->path;
+    my $path = shift;
     start();
     $request_count++;
     
@@ -382,8 +381,7 @@ sub _request($){
     undef $output;
     undef %stash;
     undef $template;
-    
-    $request = {uri => $uri, path => $path};
+
     $req_table = Text::SimpleTable->new([28, 'action'],[42, 'details']);
     
     my ($action, @args) = _find_action($path);     
@@ -402,7 +400,7 @@ sub _request($){
 	$result = $output;
 	$result = _render_template($template) if template() && !$output;
     };
-    debug "Request for @{[$uri->as_string]} [$request_count]:\n". 
+    debug "Request for '$path' [$request_count]:\n". 
       $req_table->draw;
     error "Error executing action: $@" if $@;
 
@@ -503,10 +501,51 @@ sub start() {
     info "$app_name initialized!  Starting.";    
 }
 
+sub _server(){
+    my $d = HTTP::Daemon->new || die "Cannot start server";
+    print "Please contact me at: <URL:", $d->url, ">\n";
+    while (my $c = $d->accept) {
+	while (my $r = $c->get_request) {
+	    $c->sendtest
+	}
+	$c->close;
+	undef $c;
+    }
+}
+
+sub _process_options(){
+    my $test;
+    my $server;
+    my $debug = 0;
+    GetOptions(
+	       "debug"  => \$debug,
+	       "test=s" => \$test,
+	       "server" => \$server,
+	      );
+
+    $ENV{RESTING_DEBUG} = 1 if $debug;
+
+    return {test => $test, server => $server};
+
+}
+
 END {
+    return if $already_started;
     return if(scalar keys %pages == 0); # nothing to do
+
     # auto-start the app if start() isn't explicitly called
-    start unless $already_started;
+    start();
+    my $options = _process_options();
+        
+    if($options->{test}){
+	print test($options->{test});
+	exit(0);
+    }
+    
+    if($options->{server}){
+	_server();
+	exit(0);
+    }
 }
 
 ## misc exportable functions
@@ -521,10 +560,12 @@ or dies on failure.
 sub test($){
     my $path = shift;    
     my $uri  = URI->new;
-    $uri->path($path);
+    # clean up the URI a bit
+    $uri->path($path); 
+    $path = $uri->path;
     
     croak "Must request a path" if !$path;
-    return _request($uri);
+    return _request($path);
 }
 
 1;
