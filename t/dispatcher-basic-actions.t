@@ -2,14 +2,12 @@
 # basic.t
 # Copyright (c) 2006 Jonathan Rockway <jrockway@cpan.org>
 
-use Test::More tests => 11;
-use FindBin qw($Bin);
-use File::Spec;
+use strict;
+use warnings;
+use Resting;
+use Test::More tests => 9;
 
-my $test = File::Spec->catfile($Bin, 'scripts', 'run.pl');
-ok(-e $test, 'test script exists');
-ok(do($test), "start $test");
-
+## the application is at the end of this file
 
 # test named action
 {
@@ -68,3 +66,47 @@ ok(do($test), "start $test");
 	   '/foo/index should not be foo index');
 }
 
+# the app
+BEGIN {
+    application 'test';
+
+    page 'foo/default',
+      template => 'not_found';
+
+    page 'index';
+    sub index {
+	stash who => 'world';
+	show template 'index';
+    }
+
+    page 'arguments',
+      action => sub {
+	  my $arg = shift;
+	  if ($arg == 1) {
+	      template 'arg_1';
+	  } else {
+	      template 'arg_2';
+	  }
+	  stash text => 'Argument';
+      };
+
+    page 'test',
+      action => sub { show template 'test' };
+
+    page 'foo/index',
+      template => 'foo';
+}
+
+__DATA__
+__index__
+Hello, [% who %]!
+__test__
+The test works!  Hooray for the "test" action!
+__not_found__
+404 Not found: The page you're looking for doesn't exist.
+__arg_1__
+[% text %] 1
+__arg_2__
+[% text %] 2
+__foo__
+This is the foo index.
