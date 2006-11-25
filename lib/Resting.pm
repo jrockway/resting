@@ -13,6 +13,7 @@ use URI;
 use HTTP::Request;
 use HTTP::Response;
 use HTTP::Daemon;
+use Readonly;
 
 our @EXPORT_OK = qw{application database table group page
                     debug message info warning error
@@ -45,8 +46,27 @@ like L<Catalyst|Catalyst>.
 
 =cut
 
+## constants
+
+Readonly 
+  my %LOG_LEVEL_FOR => (debug	  => 6,
+			info	  => 5,
+			information  => 5,
+			message	  => 4,
+			mess	  => 4,
+			warning	  => 3,
+			warn         => 3,
+			error        => 2,
+			err          => 2,
+			fatal        => 1,
+			critical     => 1,
+			quiet        => 0,
+		       );
+
 ## 'global' variables
 my $app_name = 'Resting';
+my $log_level = $LOG_LEVEL_FOR{warning};
+   $log_level = $LOG_LEVEL_FOR{debug} if $ENV{RESTING_DEBUG};
 my %pages;
 my $database;
 my %tables;
@@ -74,10 +94,10 @@ sub application(;$){
 }
 
 ## logging
-
 sub _msg($;@){
     my $level = shift;
-    return if !$ENV{RESTING_DEBUG} && $level eq 'debug';
+    
+    return if $log_level < ($LOG_LEVEL_FOR{$level} || 0);
     print {*STDERR} "[$app_name:$$][$level] @_\n";
 }
 
@@ -558,13 +578,24 @@ sub _process_options(){
     my $test;
     my $server;
     my $debug = 0;
+    my $log;
     GetOptions(
 	       "debug"  => \$debug,
 	       "test=s" => \$test,
 	       "server" => \$server,
+	       "log=s"  => \$log,
 	      );
-
-    $ENV{RESTING_DEBUG} = 1 if $debug;
+    
+    # setup log level
+    if(!defined $ENV{RESTING_DEBUG}){
+	# only change if there isn't an environ variable setup
+	if($log){
+	    # change to the specified level
+	    $log_level = $LOG_LEVEL_FOR{$log} || die "No log level $log";
+	}
+	# override --log xxx if --debug is set
+	$log_level = $LOG_LEVEL_FOR{debug} if $debug;
+    }
     
     return {test => $test, server => $server};
 
