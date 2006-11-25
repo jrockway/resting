@@ -546,6 +546,8 @@ sub start() {
     debug "Loaded pages\n". $actions->draw();
     debug "Loaded templates\n". $templates->draw();
     info "$app_name initialized!  Starting.";    
+    
+    return 1;
 }
 
 sub _server(){
