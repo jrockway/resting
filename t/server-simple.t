@@ -4,17 +4,18 @@
 
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More tests => 4;
 use Resting;
 use LWP::UserAgent;
 
 ok(start(), 'start app');
+
 my $pid;
 if(($pid = fork()) == 0 ){
     Resting::_server();
 }
 
-ok($pid, "Started subprocess $pid");
+sleep 1;
 my $ua = LWP::UserAgent->new;
 my $response = $ua->get('http://localhost:3000/');
 
