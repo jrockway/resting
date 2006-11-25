@@ -406,10 +406,11 @@ sub _request($){
     
     $req_table = Text::SimpleTable->new([28, 'action'],[42, 'details']);
     
-    my ($action, @args) = _find_action($path);     
     my $result;
     eval {	
-	debug "here";
+	# find action
+	my ($action, @args) = _find_action($path);     
+	
 	# run action
 	$result = _run_action($action->{name}, @args);
 	stash('_result', $result);
@@ -423,6 +424,8 @@ sub _request($){
 	$result = $output;
 	$result = _render_template($template) if template() && !$output;
     };
+    $req_table->row('error', $@) if($@);
+    
     debug "Request for '$path' [$request_count]:\n". 
       $req_table->draw;
     die "Error executing action: $@" if $@;
