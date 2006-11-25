@@ -557,16 +557,21 @@ sub _server(){
     
     local $SIG{INT} = sub { $server_done = 1 };    
     while ((my $c = $d->accept) && !$server_done) {
-	while ((my $r = $c->get_request) && !$server_done) {
-	    local $SIG{INT} = sub { 
-		die "Action aborted by keyboard interrupt";
-	    };
-	    
-	    my $response = request($r);
-	    $c->send_response($response);
-	}
-	$c->close;
-	undef $c;
+	eval {
+	    # catch the SIG{INT} handler when we're not already
+	    # inside an eval
+
+	    while ((my $r = $c->get_request) && !$server_done) {
+		local $SIG{INT} = sub { 
+		    die "Action aborted by keyboard interrupt";
+		};
+		    
+		my $response = request($r);
+		$c->send_response($response);
+	    }
+	    $c->close;
+	    undef $c;
+	};
     }
     
     debug "Shutting down the server";
