@@ -5,12 +5,13 @@ use strict;
 use base 'Exporter';
 use Getopt::Long;
 use Carp;
-use Getopt::Long;
 use CGI;
 use DBIx::Class;
 use Template;
-use URI;
 use Text::SimpleTable;
+use URI;
+use HTTP::Request;
+use HTTP::Response;
 use HTTP::Daemon;
 
 our @EXPORT_OK = qw{application database table group page
