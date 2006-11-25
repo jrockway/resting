@@ -525,7 +525,7 @@ sub start() {
 }
 
 sub _server(){
-    my $d = HTTP::Daemon->new || die "Cannot start server";
+    my $d = HTTP::Daemon->new(LocalPort=>3000) || die "Cannot start server";
     info "Server started at <". $d->url. ">.  Press C-c to abort.";
     my $kids = 0;
     my $server_done;
@@ -545,6 +545,7 @@ sub _server(){
     }
     
     debug "Shutting down the server";
+    $d->shutdown(2);
     return;
 }
 
