@@ -433,8 +433,8 @@ sub _request($){
 
 sub _action_row {
     my $action = shift;
-    my $args = @_ ? "arguments ". join ',', map {"{$_}"} @_
-      : "no arguments";
+    my $args = @_ ? 'arguments '. join ',', map {"{$_}"} @_
+      : 'no arguments';
     
     $req_table->row("run $action", $args);
 }
