@@ -5,7 +5,6 @@
 use strict;
 use warnings;
 use Test::More tests => 5;
-use FindBin qw($Bin);
 use Resting;
 use LWP::UserAgent;
 
@@ -13,7 +12,6 @@ ok(start(), 'start app');
 my $pid;
 if(($pid = fork()) == 0 ){
     Resting::_server();
-    exit(0);
 }
 
 ok($pid, "Started subprocess $pid");
@@ -24,7 +22,7 @@ ok($response->is_success, 'request was successful');
 like($response->content, qr/Everything is ok[.]/, 'content was correct');
 kill 15, $pid or warn "Can't kill $pid: $!";
 waitpid $pid, 0;
-ok($pid, "$pid exited");
+is($?, 15, "$pid exited");
 
 BEGIN {
     application "ServerTest";
