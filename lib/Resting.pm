@@ -64,9 +64,8 @@ my $already_started = 0;
 my $req_table;
 my %sessions;
 
-## signal handlers
+## signal handler
 $SIG{__WARN__} = sub { my $m=shift; chomp $m; warning($m) };
-#$SIG{__DIE__}  = sub { $errors = 1; my $m=shift; chomp $m; fatal($m); };
 
 sub application(;$){
     $app_name = shift if $_[0];
